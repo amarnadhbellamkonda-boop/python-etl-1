@@ -1,45 +1,52 @@
-import os
-import oracledb as db
-import pandas as pd
+from db_utils import get_connection
 from dotenv import load_dotenv
+import boto3
+import os
 
-env_path = r"C:\Users\amarnadh.bellamkonda\Documents\Oracle_Scripts\.env"
-load_dotenv(dotenv_path=env_path)
+from payments import export_payments
+from offices import export_offices
+from customers import export_customers
+from employees import export_employees
+from productlines import export_productlines
+from products import export_products
+from orders import export_orders
+from orderdetails import export_orderdetails
 
-def extract_tables():
-    host = os.getenv("ORACLE_HOST")
-    port = os.getenv("ORACLE_PORT")
-    sid = os.getenv("ORACLE_SID")
-    username = os.getenv("ORACLE_USERNAME")
-    password = os.getenv("ORACLE_PASSWORD")
-    schema = os.getenv("ORACLE_SCHEMA")
-    output_path = os.getenv("OUTPUT_PATH", "./data")
-    tables = os.getenv("TABLES", "").split(",")
-    tables = [t.strip() for t in tables if t.strip()]
+load_dotenv()
 
-    dsn = db.makedsn(host, port, sid=sid)
+bucket = os.getenv("BUCKET")
 
-    for table_name in tables:
-        print(f"\n Extracting table: {table_name}")
-        try:
-            conn = db.connect(user=username, password=password, dsn=dsn)
-            query = f"SELECT * FROM {schema}.{table_name}"
-            df = pd.read_sql(query, conn)
+table_exports = [
+    ("Payments", export_payments),
+    ("Offices", export_offices),
+    ("Customers", export_customers),
+    ("Employees", export_employees),
+    ("ProductLines", export_productlines),
+    ("Products", export_products),
+    ("Orders", export_orders),
+    ("OrderDetails", export_orderdetails),
+]
 
-            for col in df.columns:
-                df[col] = df[col].apply(lambda x: str(x.read()) if hasattr(x, "read") else x)
+def upload_to_s3(local_path, bucket, s3_key):
+    s3 = boto3.client('s3')
+    s3.upload_file(local_path, bucket, s3_key)
 
-            conn.close()
-
-            folder = output_path
-            os.makedirs(folder, exist_ok=True)
-            file_path = os.path.join(folder, f"{table_name}.csv")
-            df.to_csv(file_path, index=False)
-
-            print(f" Extracted {len(df)} rows → {file_path}")
-
-        except Exception as e:
-            print(f" Error extracting {table_name}: {e}")
+def run_etl():
+    update_timestamps_str = os.getenv("UPDATE_TIMESTAMPS")
+    if not update_timestamps_str:
+        raise ValueError("UPDATE_TIMESTAMPS not set in .env")
+    
+    update_timestamps = [d.strip() for d in update_timestamps_str.split(",") if d.strip()]
+    
+    for update_timestamp in update_timestamps:
+        conn, cursor = get_connection(update_timestamp)
+        for table, export_func in table_exports:
+            filename = export_func(cursor, update_timestamp)
+            s3_key = f"{table}/{update_timestamp}/{filename}"
+            upload_to_s3(filename, bucket, s3_key)
+            os.remove(filename)
+        cursor.close()
+        conn.close()
 
 if __name__ == "__main__":
-    extract_tables()
+    run_etl()

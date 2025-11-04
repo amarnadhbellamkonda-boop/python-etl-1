@@ -1,11 +1,11 @@
 import csv
 import os
 
-def export_employees(cursor, update_timestamp):
-    table = "Employees"
-    columns_str = os.getenv("EMPLOYEES_COLUMNS")
+def export_orderdetails(cursor, update_timestamp):
+    table = "OrderDetails"
+    columns_str = os.getenv("ORDERDETAILS_COLUMNS")
     if not columns_str:
-        raise ValueError("EMPLOYEES_COLUMNS not set in .env")
+        raise ValueError("ORDERDETAILS_COLUMNS not set in .env")
     columns = [col.strip() for col in columns_str.split(",")]
 
     select_cols = ', '.join(f'"{col}"' for col in columns)
