@@ -1,19 +1,90 @@
 import csv
 import os
+from db_utils import get_connection
+from dotenv import load_dotenv
+from upload_to_s3 import upload_to_s3
 
-def export_productlines(cursor, update_timestamp):
+load_dotenv()
+
+def load_productlines(cursor, update_timestamp):
     table = "ProductLines"
     columns_str = os.getenv("PRODUCTLINES_COLUMNS")
+    db_link = os.getenv("DB_LINK")
+
     if not columns_str:
         raise ValueError("PRODUCTLINES_COLUMNS not set in .env")
+    if not db_link:
+        raise ValueError("DB_LINK not set in .env")
+
     columns = [col.strip() for col in columns_str.split(",")]
 
-    select_cols = ', '.join(f'"{col}"' for col in columns)
-    cursor.execute(f'SELECT {select_cols} FROM "{table.upper()}"')
+    print(f"Fetching data for table '{table}' with timestamp '{update_timestamp}'...")
+    print(f'SELECT {columns_str} FROM {table.upper()}@{db_link}')
+
+    cursor.execute(f'SELECT {columns_str} FROM {table.upper()}@{db_link}')
     rows = cursor.fetchall()
+    print(f"Fetched {len(rows)} rows from the database.")
+
     filename = f"{table}_{update_timestamp}.csv"
-    with open(filename, 'w', newline='') as csvfile:
+    print(f"Writing data to file: {filename}")
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(columns)
         writer.writerows(rows)
+    print(f"File {filename} written successfully.")
     return filename
+
+def export_productlines():
+    table = "ProductLines"
+    update_timestamps_str = os.getenv("UPDATE_TIMESTAMPS")
+    bucket = os.getenv("BUCKET")
+
+    if not update_timestamps_str:
+        raise ValueError("UPDATE_TIMESTAMPS not set in .env")
+    if not bucket:
+        raise ValueError("BUCKET not set in .env")
+
+    print("Starting export process for Customers table...")
+
+    update_timestamps = [d.strip() for d in update_timestamps_str.split(",") if d.strip()]  
+
+    for update_timestamp in update_timestamps:
+        print(f"\nExporting data for timestamp: {update_timestamp}")
+        conn, cursor = get_connection(update_timestamp)
+
+        try:
+            print(f"Database connection established for {update_timestamp}.")
+
+            filename = load_productlines(cursor, update_timestamp)
+
+            s3_key = f"{table}/{update_timestamp}/{filename}"
+            
+            print(f"Uploading {filename} to S3 bucket '{bucket}' with key '{s3_key}'...")
+            try:
+                print(f"Uploading {filename} to S3 bucket '{bucket}' with key '{s3_key}'...")
+                upload_to_s3(filename, bucket, s3_key)
+                print(f"Uploaded to s3://{bucket}/{s3_key}")
+            except Exception as upload_err:
+                print(f"Error uploading {filename}: {upload_err}")
+                continue
+
+            os.remove(filename)
+            print(f"Deleted local file: {filename}")
+
+        except Exception as db_err:
+            print(f"Database error for {update_timestamp}: {db_err}")
+
+        finally:
+            if cursor:
+                cursor.close()
+                print("Database cursor closed.")
+            if conn:
+                conn.close()
+                print("Database connection closed.")
+
+    print("\nExport process completed for all update timestamps.")
+
+
+
+if __name__ == "__main__":
+    export_productlines()
