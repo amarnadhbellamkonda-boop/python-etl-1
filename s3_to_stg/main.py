@@ -4,8 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dotenv import load_dotenv
-from utils import get_redshift_connection, get_latest_etl_batch_date
+from utils import get_latest_etl_batch
 from s3_to_stg.customers import load_customers
 from s3_to_stg.products import load_products
 from s3_to_stg.payments import load_payments    
@@ -27,16 +26,8 @@ table_exports = [
 ]
 
 def run_s3_to_stg(latest_date=None):
-    # if cur is None or conn is None:
-    #     conn, cur = get_redshift_connection()
-        
     if latest_date is None:
-        latest_date = get_latest_etl_batch_date()
-    
-    # bucket = os.getenv("BUCKET")
-
-    # if not bucket:
-    #     raise ValueError("BUCKET not set in .env")
+        latest_batch,latest_date = get_latest_etl_batch()
     
     for load_func in table_exports:
         print(f"Loading data for function: {load_func}")

@@ -1,16 +1,22 @@
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from dotenv import load_dotenv
-from utils import get_redshift_connection, get_latest_etl_batch_date
+from utils import get_redshift_connection, get_latest_etl_batch
 
 def load_productlines(conn=None, cur=None, latest_date=None):
     if cur is None or conn is None:
         conn, cur = get_redshift_connection()
         
     if latest_date is None:
-        latest_date = get_latest_etl_batch_date()
+        latest_batch,latest_date = get_latest_etl_batch()
     
     iam_role = os.getenv("IAM")
     s3_bucket = os.getenv("BUCKET")
+    dev_stage = os.getenv("DEV_STAGE_SCHEMA")
 
     if not s3_bucket:   
         raise ValueError("BUCKET not set in .env")
@@ -20,7 +26,7 @@ def load_productlines(conn=None, cur=None, latest_date=None):
 
     try:
         table = "ProductLines"
-        redshift_table = f"j25Amarnadh_devstage.{table.lower()}"
+        redshift_table = f"{dev_stage}.{table.lower()}"
         s3_key = f"{table}/{latest_date}/{table}_{latest_date}.csv"
         truncate_query = f"TRUNCATE TABLE {redshift_table};"
         print(f"Truncating table {redshift_table}...")

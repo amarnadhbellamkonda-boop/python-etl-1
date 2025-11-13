@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils import get_latest_etl_batch_date
+from utils import get_latest_etl_batch
 
 table_exports = [
     ("Customers", export_customers),
@@ -28,7 +28,7 @@ def run_src_to_s3(latest_date=None):
         print("ETL process started from src to s3.")
         
         if latest_date is None:
-            latest_date = get_latest_etl_batch_date()
+            latest_batch,latest_date = get_latest_etl_batch()
         
         for table, export_func in table_exports:
             try:
