@@ -15,6 +15,7 @@ def run_etl_process():
         run_s3_to_stg(latest_date)
         print("S3 to dev_stage completed.")
         run_dw_etl(latest_batch,latest_date)
+        print("dev_stage to dev_dw ETL completed.")
     except Exception as e:
         print("Error in master etl process: ",e)
     
